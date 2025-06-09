@@ -2,12 +2,14 @@ const express = require('express');
 const multer = require('multer');
 const Jimp = require('jimp');
 const crypto = require('crypto');
-const cors = require ("cors")
+const cors = require ("cors");
+const dotenv = require("dotenv");
 const app = express();
 const upload = multer({ dest: 'uploads/' });
 
 app.use(cors());
 app.use(express.urlencoded({extended : true}));
+dotenv.config();
 
 // Helper to convert decimal to binary with padding
 const toBinary = (num, bits) => num.toString(2).padStart(bits, '0');
