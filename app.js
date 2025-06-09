@@ -2,10 +2,11 @@ const express = require('express');
 const multer = require('multer');
 const Jimp = require('jimp');
 const crypto = require('crypto');
+const cors = require ("cors")
 const app = express();
 const upload = multer({ dest: 'uploads/' });
 
-
+app.use(cors());
 app.use(express.urlencoded({extended : true}));
 
 // Helper to convert decimal to binary with padding
