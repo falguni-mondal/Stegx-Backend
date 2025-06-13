@@ -111,7 +111,7 @@ app.post("/stegx", upload.single("image"), async (req, res) => {
   );
 
   const inpImgPath = `./uploads/${image.filename}`;
-  const outImgPath = `./images/${image.filename}`;
+  const outImgPath = `./output/${image.filename}`;
 
 
   await embedMessageInImage(inpImgPath, outImgPath, subtracted);
