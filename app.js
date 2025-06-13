@@ -1,94 +1,185 @@
-const express = require('express');
-const multer = require('multer');
-const Jimp = require('jimp');
-const crypto = require('crypto');
-const cors = require ("cors");
+const express = require("express");
+const fs = require("fs");
+const Jimp = require("jimp");
+const cors = require("cors");
 const dotenv = require("dotenv");
 const app = express();
-const upload = multer({ dest: 'uploads/' });
+const { upload } = require("./configs/multer-config");
 
-app.use(cors());
-app.use(express.urlencoded({extended : true}));
+app.use(cors({ origin: "http://localhost:5173" }));
+app.use(express.urlencoded({ extended: true }));
 dotenv.config();
 
-// Helper to convert decimal to binary with padding
-const toBinary = (num, bits) => num.toString(2).padStart(bits, '0');
-const fromBinary = (bin) => parseInt(bin, 2);
+const twosComplement = (binaryString) => {
+  if (binaryString.length !== 24) {
+    return "Binary string must be 24 bits long";
+  }
 
-// Generate 24-bit random binary string
-const getRandom24Bit = () => crypto.randomBytes(3).toString('hex');
+  // 1. Invert the bits (1's complement)
+  let invertedString = "";
+  for (let bit of binaryString) {
+    invertedString += bit === "0" ? "1" : "0";
+  }
 
-// Convert message to ASCII array
-const messageToAscii = (msg) => Array.from(msg).map(c => c.charCodeAt(0));
+  // 2. Add 1 to the 1's complement
+  let carry = 1;
+  let result = "";
+  for (let i = invertedString.length - 1; i >= 0; i--) {
+    let sum = parseInt(invertedString[i]) + carry;
+    result = (sum % 2).toString() + result;
+    carry = Math.floor(sum / 2);
+  }
 
-// Embed data in image
-const embedData = async (imagePath, message) => {
-  const image = await Jimp.read(imagePath);
-  const asciiArr = messageToAscii(message);
-  const avg = Math.round(asciiArr.reduce((a, b) => a + b, 0) / asciiArr.length);
-  const arr = asciiArr.map(v => v * avg);
+  return result;
+};
 
-  const ranHex = getRandom24Bit();
-  const ranBin = parseInt(ranHex, 16).toString(2).padStart(24, '0');
-  const ranDec = parseInt(ranBin, 2);
-  const ranComp = (~ranDec + 1 >>> 0).toString(2).padStart(24, '0');
+const keyGenerator = (rnd, avg, len) => {
+  const keyParts = [
+    parseInt(rnd, 2).toString(16),
+    avg.toString(16),
+    len.toString(16),
+  ];
 
-  const arr2 = arr.map(num => toBinary(num, 16));
-  const arr3 = arr2.map(b => {
-    const bDec = parseInt(b, 2);
-    const diff = (parseInt(ranComp, 2) - bDec) >>> 0;
-    return toBinary(diff, 24);
-  });
+  let key = keyParts[0];
 
+  for (let i = 1; i < keyParts.length; i++) {
+    const seperator = String.fromCharCode(Math.floor(Math.random() * 20 + 71));
+    key = key + seperator + keyParts[i];
+  }
+  return key;
+};
+
+const embedMessageInImage = async (
+  inputImagePath,
+  outputImagePath,
+  binaryDataArray
+) => {
+  const image = await Jimp.read(inputImagePath);
   let pixelIndex = 0;
-  for (const bin of arr3) {
-    for (let i = 0; i < 24; i += 6) {
-      const chunk = bin.slice(i, i + 6);
+
+  for (let binary of binaryDataArray) {
+    for (let i = 0; i < 4; i++) {
       const x = pixelIndex % image.bitmap.width;
       const y = Math.floor(pixelIndex / image.bitmap.width);
-      const idx = image.getPixelIndex(x, y);
-      let [r, g, b, a] = [
-        image.bitmap.data[idx],
-        image.bitmap.data[idx + 1],
-        image.bitmap.data[idx + 2],
-        image.bitmap.data[idx + 3]
-      ];
-      r = (r & 0b11111100) | parseInt(chunk.slice(0, 2), 2);
-      g = (g & 0b11111100) | parseInt(chunk.slice(2, 4), 2);
-      b = (b & 0b11111100) | parseInt(chunk.slice(4, 6), 2);
-      image.bitmap.data[idx] = r;
-      image.bitmap.data[idx + 1] = g;
-      image.bitmap.data[idx + 2] = b;
-      image.bitmap.data[idx + 3] = a;
+
+      if (y >= image.bitmap.height) {
+        throw new Error("Image too small to embed message.");
+      }
+
+      const idx = i * 6;
+      const color = Jimp.intToRGBA(image.getPixelColor(x, y));
+
+      const newR =
+        (color.r & 0b11111100) | parseInt(binary.slice(idx, idx + 2), 2);
+      const newG =
+        (color.g & 0b11111100) | parseInt(binary.slice(idx + 2, idx + 4), 2);
+      const newB =
+        (color.b & 0b11111100) | parseInt(binary.slice(idx + 4, idx + 6), 2);
+
+      image.setPixelColor(Jimp.rgbaToInt(newR, newG, newB, color.a), x, y);
       pixelIndex++;
     }
   }
 
-  const key = `${ranHex}G${avg.toString(16)}H${message.length.toString(16)}`;
-  const outputPath = 'outputs/stego_image.png';
-  await image.writeAsync(outputPath);
-
-  return { key, outputPath };
+  await image.writeAsync(outputImagePath);
 };
 
-// Express route to upload image and embed message
-app.post('/embed', upload.single('image'), async (req, res) => {
-  const message = req.body.message;
-  const filePath = req.file.path;
-  if (!message || !filePath) return res.status(400).send('Missing data');
+app.post("/stegx", upload.single("image"), async (req, res) => {
+  const image = req.file;
+  const { text, action } = req.body;
 
-  try {
-    const { key, outputPath } = await embedData(filePath, message);
-    res.json({ key, output: outputPath });
-  } catch (err) {
-    console.error(err);
-    res.status(500).send('Error embedding message');
-  }
+  const randomNumber = Math.floor(Math.random() * 2 ** 24); // Range: 0 to 16777215
+  const ran = randomNumber.toString(2).padStart(24, "0"); // Ensure 24 bits
+
+  const asciiArr = text.split("").map((char) => char.charCodeAt(0));
+
+  const avg = Math.floor(
+    asciiArr.reduce((sum, num) => sum + num, 0) / asciiArr.length
+  );
+
+  const multiplied = asciiArr.map((ascii) => ascii * avg);
+
+  const twosComplement24bit = twosComplement(ran);
+
+  const DeciTwosCom = parseInt(twosComplement24bit, 2);
+
+  const subtracted = multiplied.map((num) =>
+    (DeciTwosCom - num).toString(2).padStart(24, "0")
+  );
+
+  const inpImgPath = `./uploads/${image.filename}`;
+  const outImgPath = `./images/${image.filename}`;
+
+
+  await embedMessageInImage(inpImgPath, outImgPath, subtracted);
+
+  const key = keyGenerator(ran, avg, text.length);
+
+  // Send the image as base64
+  fs.readFile(outImgPath, (err, data) => {
+    if (err) {
+      console.error("Error reading output image:", err);
+      return res
+        .status(500)
+        .json({ success: false, message: "Failed to read output image" });
+    }
+
+    const base64Image = data.toString("base64");
+
+    res.status(200).json({
+      success: true,
+      key,
+      image: `data:image/png;base64,${base64Image}`,
+    });
+  });
 });
 
-app.get("/", (req, res) => {
-    res.send("Working!!");
-})
+app.get("/", async (req, res) => {
+  const text = "Help me!";
+  const randomNumber = Math.floor(Math.random() * 2 ** 24); // Range: 0 to 16777215
+  const ran = randomNumber.toString(2).padStart(24, "0"); // Ensure 24 bits
+
+  const asciiArr = text.split("").map((char) => char.charCodeAt(0));
+
+  const avg = Math.floor(
+    asciiArr.reduce((sum, num) => sum + num, 0) / asciiArr.length
+  );
+
+  const multiplied = asciiArr.map((ascii) => ascii * avg);
+
+  const twosComplement24bit = twosComplement(ran);
+
+  const DeciTwosCom = parseInt(twosComplement24bit, 2);
+
+  const subtracted = multiplied.map((num) =>
+    (DeciTwosCom - num).toString(2).padStart(24, "0")
+  );
+
+  const inpImgPath = `./uploads/${inpImgName}`;
+  const outImgPath = `./output/${inpImgName}`;
+
+  await embedMessageInImage(inpImgPath, outImgPath, subtracted);
+
+  const key = keyGenerator(ran, avg, text.length);
+
+  // Send the image as base64
+  fs.readFile(outImgPath, (err, data) => {
+    if (err) {
+      console.error("Error reading output image:", err);
+      return res
+        .status(500)
+        .json({ success: false, message: "Failed to read output image" });
+    }
+
+    const base64Image = data.toString("base64");
+
+    res.status(200).json({
+      success: true,
+      key,
+      image: `data:image/png;base64,${base64Image}`,
+    });
+  });
+});
 
 const port = process.env.PORT || 3000;
 app.listen(port, () => {
