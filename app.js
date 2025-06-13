@@ -13,6 +13,10 @@ app.use(cors({
 app.use(express.urlencoded({ extended: true }));
 dotenv.config();
 
+// Ensure 'uploads' and 'output' folders exist
+if (!fs.existsSync("./uploads")) fs.mkdirSync("./uploads");
+if (!fs.existsSync("./output")) fs.mkdirSync("./output");
+
 const twosComplement = (binaryString) => {
   if (binaryString.length !== 24) {
     return "Binary string must be 24 bits long";
