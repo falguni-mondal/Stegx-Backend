@@ -134,53 +134,6 @@ app.post("/stegx", upload.single("image"), async (req, res) => {
   });
 });
 
-app.get("/", async (req, res) => {
-  const text = "Help me!";
-  const randomNumber = Math.floor(Math.random() * 2 ** 24); // Range: 0 to 16777215
-  const ran = randomNumber.toString(2).padStart(24, "0"); // Ensure 24 bits
-
-  const asciiArr = text.split("").map((char) => char.charCodeAt(0));
-
-  const avg = Math.floor(
-    asciiArr.reduce((sum, num) => sum + num, 0) / asciiArr.length
-  );
-
-  const multiplied = asciiArr.map((ascii) => ascii * avg);
-
-  const twosComplement24bit = twosComplement(ran);
-
-  const DeciTwosCom = parseInt(twosComplement24bit, 2);
-
-  const subtracted = multiplied.map((num) =>
-    (DeciTwosCom - num).toString(2).padStart(24, "0")
-  );
-
-  const inpImgPath = `./uploads/${inpImgName}`;
-  const outImgPath = `./output/${inpImgName}`;
-
-  await embedMessageInImage(inpImgPath, outImgPath, subtracted);
-
-  const key = keyGenerator(ran, avg, text.length);
-
-  // Send the image as base64
-  fs.readFile(outImgPath, (err, data) => {
-    if (err) {
-      console.error("Error reading output image:", err);
-      return res
-        .status(500)
-        .json({ success: false, message: "Failed to read output image" });
-    }
-
-    const base64Image = data.toString("base64");
-
-    res.status(200).json({
-      success: true,
-      key,
-      image: `data:image/png;base64,${base64Image}`,
-    });
-  });
-});
-
 const port = process.env.PORT || 3000;
 app.listen(port, () => {
   console.log(`Running on http://localhost:${port}`);
