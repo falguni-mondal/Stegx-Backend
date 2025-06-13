@@ -6,7 +6,10 @@ const dotenv = require("dotenv");
 const app = express();
 const { upload } = require("./configs/multer-config");
 
-app.use(cors({ origin: "http://localhost:5173" }));
+app.use(cors({
+  origin: "http://localhost:5173",
+  credentials : true
+ }));
 app.use(express.urlencoded({ extended: true }));
 dotenv.config();
 
