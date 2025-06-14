@@ -3,8 +3,10 @@ const fs = require("fs");
 const Jimp = require("jimp");
 const cors = require("cors");
 const dotenv = require("dotenv");
-const app = express();
 const { upload } = require("./configs/multer-config");
+const keyGenerator = require("./utils/keyGenerator");
+const twosComplement = require("./utils/twosComplement");
+const app = express();
 
 app.use(cors({
   origin: "http://localhost:5173",
@@ -17,44 +19,6 @@ dotenv.config();
 if (!fs.existsSync("./uploads")) fs.mkdirSync("./uploads");
 if (!fs.existsSync("./output")) fs.mkdirSync("./output");
 
-const twosComplement = (binaryString) => {
-  if (binaryString.length !== 24) {
-    return "Binary string must be 24 bits long";
-  }
-
-  // 1. Invert the bits (1's complement)
-  let invertedString = "";
-  for (let bit of binaryString) {
-    invertedString += bit === "0" ? "1" : "0";
-  }
-
-  // 2. Add 1 to the 1's complement
-  let carry = 1;
-  let result = "";
-  for (let i = invertedString.length - 1; i >= 0; i--) {
-    let sum = parseInt(invertedString[i]) + carry;
-    result = (sum % 2).toString() + result;
-    carry = Math.floor(sum / 2);
-  }
-
-  return result;
-};
-
-const keyGenerator = (rnd, avg, len) => {
-  const keyParts = [
-    parseInt(rnd, 2).toString(16),
-    avg.toString(16),
-    len.toString(16),
-  ];
-
-  let key = keyParts[0];
-
-  for (let i = 1; i < keyParts.length; i++) {
-    const seperator = String.fromCharCode(Math.floor(Math.random() * 20 + 71));
-    key = key + seperator + keyParts[i];
-  }
-  return key;
-};
 
 const embedMessageInImage = async (
   inputImagePath,
