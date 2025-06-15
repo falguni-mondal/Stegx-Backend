@@ -47,7 +47,7 @@ app.post("/stegx", upload.single("image"), async (req, res) => {
 
       res.status(200).json({
         success: true,
-        key,
+        text : key,
         image: `data:image/png;base64,${base64Image}`,
       });
     });
@@ -64,7 +64,7 @@ app.post("/stegx", upload.single("image"), async (req, res) => {
 
       deleteAllFiles("./uploads");
 
-      res.status(200).json({ success: true, message });
+      res.status(200).json({ success: true, text : message });
     } catch (err) {
       console.error(err);
       res.status(500).json({ success: false, error: err.message });
