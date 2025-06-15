@@ -52,7 +52,7 @@ app.post("/stegx", upload.single("image"), async (req, res) => {
       });
     });
 
-    // deleteAllFiles("./uploads");
+    deleteAllFiles("./uploads");
   } else {
     try {
       const { ran, avg, len } = keyExtractor(text);
@@ -62,7 +62,7 @@ app.post("/stegx", upload.single("image"), async (req, res) => {
 
       const message = decryption(bitStream, ran, avg, len);
 
-      // deleteAllFiles("./uploads");
+      deleteAllFiles("./uploads");
 
       res.status(200).json({ success: true, text : message });
     } catch (err) {
