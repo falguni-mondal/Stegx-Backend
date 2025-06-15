@@ -13,7 +13,7 @@ const app = express();
 
 app.use(
   cors({
-    origin: ['http://localhost:5173', 'https://stegx.netlify.app/'],
+    origin: ['http://localhost:5173', 'https://stegx.netlify.app'],
     credentials: true,
   })
 );
